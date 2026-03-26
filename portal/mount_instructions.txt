@@ -1,0 +1,18 @@
+Add these two lines to main.py after the existing app.mount("/media"...) line:
+
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/portal", StaticFiles(directory="portal", html=True), name="portal")
+
+Then copy the civicpulse_web folder to your civicpulse backend folder and rename it to "portal":
+
+civicpulse/
+  portal/
+    index.html
+    css/
+      style.css
+    js/
+      api.js
+    pages/
+      login.html
+      dashboard.html

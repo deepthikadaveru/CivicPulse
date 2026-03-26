@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CivicPulse — Officials Dashboard</title>
+  <link rel="stylesheet" href="/portal/css/style.css"/>
+  <style>
+    .layout { display:flex; min-height: calc(100vh - 56px); }
+    .sidenav {
+      width: 220px;
+      background: var(--surface);
+      border-right: 0.5px solid var(--border);
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .sidenav .nav-item {
+      padding: 9px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      font-size: 14px;
+    }
+    .sidenav .nav-item:hover { background: var(--bg); color: var(--text); }
+    .sidenav .nav-item.active { background: var(--primary-light); color: var(--primary); }
+    .sidenav .nav-item .count {
+      margin-left: auto;
+      background: var(--critical);
+      color: #fff;
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 11px;
+    }
+    .sidenav .divider {
+      height: 0.5px; background: var(--border);
+      margin: 8px 0;
+    }
+    .main { flex:1; padding: 24px; overflow-y: auto; }
+
+    .issue-row { cursor: pointer; }
+    .issue-row:hover td { background: var(--primary-light) !important; }
+
+    .escalated-badge {
+      background: #FCEBEB;
+      color: var(--critical);
+      border: 0.5px solid var(--critical);
+      border-radius: 4px;
+      font-size: 10px;
+      padding: 1px 6px;
+      font-weight: 700;
+    }
+
+    .detail-modal .media-img {
+      width: 100%;
+      max-height: 200px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .timeline-item {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+    .timeline-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+      flex-shrink: 0;
+      margin-top: 4px;
+    }
+    .comment-item {
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    .comment-item .author {
+      font-weight: 600;
+      font-size: 12px;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-select {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 0.5px solid var(--border);
+      font-size: 13px;
+    }
+    .user-pill {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .user-pill .avatar {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <a class="brand" href="/portal/">
+    <div class="icon">🏙️</div>
+    CivicPulse
+  </a>
+  <div class="nav-links">
+    <div class="user-pill">
+      <div class="avatar" id="userAvatar">?</div>
+      <span id="userName" style="font-weight:600; font-size:13px;"></span>
+      <span id="userRole" class="badge badge-pending" style="font-size:11px;"></span>
+    </div>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Log out</button>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- Sidenav -->
+  <nav class="sidenav">
+    <button class="nav-item active" onclick="showTab('queue', this)">
+      📋 My Queue <span class="count hidden" id="queueCount">0</span>
+    </button>
+    <button class="nav-item" onclick="showTab('all', this)">
+      🗂️ All Issues
+    </button>
+    <button class="nav-item" onclick="showTab('escalated', this)">
+      🚨 Escalated
+    </button>
+    <button class="nav-item" onclick="showTab('resolved', this)">
+      ✅ Resolved
+    </button>
+    <div class="divider"></div>
+    <button class="nav-item" onclick="window.open('/portal/', '_blank')">
+      🗺️ Public Map
+    </button>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card"><div class="value" id="s-total">—</div><div class="label">Total in queue</div></div>
+      <div class="stat-card"><div class="value" id="s-pending" style="color:var(--text-muted);">—</div><div class="label">Pending</div></div>
+      <div class="stat-card"><div class="value" id="s-progress" style="color:var(--primary);">—</div><div class="label">In progress</div></div>
+      <div class="stat-card"><div class="value" id="s-escalated" style="color:var(--critical);">—</div><div class="label">Escalated</div></div>
+      <div class="stat-card"><div class="value" id="s-resolved" style="color:var(--resolved);">—</div><div class="label">Resolved</div></div>
+    </div>
+
+    <!-- Page header -->
+    <div class="page-header">
+      <h1 id="tabTitle">My Queue</h1>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="searchBar" placeholder="Search..."
+          style="width:200px;" oninput="applySearch()"/>
+        <select id="severityFilter" class="status-select" onchange="applySearch()">
+          <option value="">All severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="moderate">Moderate</option>
+          <option value="low">Low</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="loadIssues()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- Issues table -->
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div class="table-wrap">
+        <table id="issuesTable">
+          <thead>
+            <tr>
+              <th>Issue</th>
+              <th>Category</th>
+              <th>Severity</th>
+              <th>Status</th>
+              <th>Score</th>
+              <th>Age</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="issuesBody">
+            <tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted);">
+              <span class="spinner" style="margin:0 auto; display:block;"></span>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Issue detail modal -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal" style="max-width:580px;" id="detailModalContent">
+  </div>
+</div>
+
+<script src="/portal/js/api.js"></script>
+<script>
+  // ── Auth guard ─────────────────────────────────────────────────────────
+  if (!Auth.isLoggedIn() || !Auth.isOfficial()) {
+    window.location.href = '/portal/pages/login.html';
+  }
+
+  const user = Auth.getUser();
+  document.getElementById('userAvatar').textContent = (user?.name||'?')[0].toUpperCase();
+  document.getElementById('userName').textContent = user?.name || '';
+  document.getElementById('userRole').textContent = (user?.role||'').replace('_',' ');
+
+  let allIssues = [];
+  let currentTab = 'queue';
+  let cityId = null;
+
+  // ── Init ───────────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', async () => {
+    cityId = await ensureCity();
+    await loadIssues();
+  });
+
+  async function loadIssues() {
+    cityId = cityId || await ensureCity();
+    if (!cityId) return;
+
+    document.getElementById('issuesBody').innerHTML =
+      `<tr><td colspan="7" style="text-align:center; padding:40px;">
+        <span class="spinner" style="margin:0 auto; display:block;"></span>
+      </td></tr>`;
+
+    try {
+      // Load issues for this department (officials see their dept's issues)
+      const params = new URLSearchParams({ city_id: cityId, limit: 100 });
+      if (user?.department_id) params.set('department_id', user.department_id);
+
+      const res = await get(`/issues/?${params}`, true);
+      allIssues = res.issues || [];
+      updateStats(allIssues);
+      renderTable(filterByTab(allIssues));
+    } catch(e) {
+      showToast('Failed to load issues: ' + e.message, 'error');
+    }
+  }
+
+  function filterByTab(issues) {
+    switch(currentTab) {
+      case 'queue':
+        return issues.filter(i => !['resolved','rejected'].includes(i.status));
+      case 'escalated':
+        return issues.filter(i => i.is_escalated && i.status !== 'resolved');
+      case 'resolved':
+        return issues.filter(i => i.status === 'resolved');
+      default:
+        return issues;
+    }
+  }
+
+  function applySearch() {
+    const q = document.getElementById('searchBar').value.toLowerCase();
+    const sev = document.getElementById('severityFilter').value;
+    let filtered = filterByTab(allIssues);
+    if (q) filtered = filtered.filter(i =>
+      i.title.toLowerCase().includes(q) ||
+      (i.address||'').toLowerCase().includes(q) ||
+      (i.category_name||'').toLowerCase().includes(q)
+    );
+    if (sev) filtered = filtered.filter(i => i.severity === sev);
+    renderTable(filtered);
+  }
+
+  function renderTable(issues) {
+    if (!issues.length) {
+      document.getElementById('issuesBody').innerHTML =
+        `<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-muted);">No issues found</td></tr>`;
+      return;
+    }
+    document.getElementById('issuesBody').innerHTML = issues.map(i => `
+      <tr class="issue-row" onclick="openDetail('${i.id}')">
+        <td>
+          <div style="font-weight:600; font-size:13px; max-width:220px;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            ${i.title}
+            ${i.is_escalated ? '<span class="escalated-badge">ESCALATED</span>' : ''}
+          </div>
+          ${i.address ? `<div class="text-muted text-small mt-4">📍 ${i.address}</div>` : ''}
+        </td>
+        <td><span class="text-small">${i.category_name||'—'}</span></td>
+        <td>
+          <div class="flex-center gap-8">
+            <span class="dot dot-${i.severity}"></span>
+            <span class="text-small" style="text-transform:capitalize;">${i.severity}</span>
+          </div>
+        </td>
+        <td>${badgeHtml(i.status, i.status)}</td>
+        <td><strong>${i.priority_score||0}</strong></td>
+        <td class="text-muted text-small">${i.days_open||0}d</td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); quickStatus('${i.id}')">
+            Update
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function updateStats(issues) {
+    const active = issues.filter(i => !['resolved','rejected'].includes(i.status));
+    document.getElementById('s-total').textContent = active.length;
+    document.getElementById('s-pending').textContent =
+      issues.filter(i => i.status === 'pending').length;
+    document.getElementById('s-progress').textContent =
+      issues.filter(i => i.status === 'in_progress').length;
+    document.getElementById('s-escalated').textContent =
+      issues.filter(i => i.is_escalated).length;
+    document.getElementById('s-resolved').textContent =
+      issues.filter(i => i.status === 'resolved').length;
+
+    const escCount = issues.filter(i => i.is_escalated && i.status !== 'resolved').length;
+    const countEl = document.getElementById('queueCount');
+    if (escCount > 0) {
+      countEl.textContent = escCount;
+      countEl.classList.remove('hidden');
+    }
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────────────
+  function showTab(tab, btn) {
+    currentTab = tab;
+    document.querySelectorAll('.sidenav .nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const titles = { queue:'My Queue', all:'All Issues', escalated:'Escalated Issues', resolved:'Resolved' };
+    document.getElementById('tabTitle').textContent = titles[tab];
+    renderTable(filterByTab(allIssues));
+  }
+
+  // ── Issue detail modal ─────────────────────────────────────────────────
+  async function openDetail(id) {
+    const modal = document.getElementById('detailModal');
+    const content = document.getElementById('detailModalContent');
+    content.innerHTML = `<div style="text-align:center; padding:40px;">
+      <span class="spinner" style="margin:0 auto; display:block;"></span>
+    </div>`;
+    modal.classList.add('open');
+
+    try {
+      const issue = await get(`/issues/${id}`, true);
+      const media = issue.media || [];
+      const logs  = issue.status_logs || [];
+      const comments = issue.comments || [];
+
+      const statusOptions = ['pending','verified','assigned','in_progress','resolved','rejected']
+        .map(s => `<option value="${s}" ${issue.status===s?'selected':''}>${s.replace('_',' ')}</option>`)
+        .join('');
+
+      content.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+          <div>
+            <h3 style="font-size:16px; margin-bottom:4px;">${issue.title}</h3>
+            <div style="color:var(--text-muted); font-size:12px;">
+              📍 ${issue.address||'No address'} · Reported by ${issue.reporter_name||'Unknown'}
+            </div>
+          </div>
+          <button onclick="closeModal()" style="background:none; border:none; font-size:20px;
+            cursor:pointer; color:var(--text-muted); flex-shrink:0;">✕</button>
+        </div>
+
+        ${media.length && media[0].file_url ? `
+          <img src="http://127.0.0.1:8000${media[0].file_url}" class="detail-modal media-img"
+            onerror="this.style.display='none'"/>
+        ` : ''}
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          ${badgeHtml(issue.status, issue.status)}
+          ${badgeHtml(issue.severity, issue.severity)}
+          ${issue.department_name ? `<span class="badge badge-pending">🏢 ${issue.department_name}</span>` : ''}
+          ${issue.is_escalated ? `<span class="escalated-badge">🚨 ESCALATED</span>` : ''}
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px;">
+          <div class="stat-card" style="padding:8px;">
+            <div class="value" style="font-size:18px;">${issue.report_count||1}</div>
+            <div class="label">Reports</div>
+          </div>
+          <div class="stat-card" style="padding:8px;">
+            <div class="value" style="font-size:18px;">${issue.upvote_count||0}</div>
+            <div class="label">Upvotes</div>
+          </div>
+          <div class="stat-card" style="padding:8px;">
+            <div class="value" style="font-size:18px;">${issue.days_open||0}d</div>
+            <div class="label">Open</div>
+          </div>
+          <div class="stat-card" style="padding:8px;">
+            <div class="value" style="font-size:18px;">${issue.priority_score||0}</div>
+            <div class="label">Score</div>
+          </div>
+        </div>
+
+        ${issue.description ? `
+          <div style="margin-bottom:14px;">
+            <div style="font-weight:600; font-size:13px; margin-bottom:4px;">Description</div>
+            <div style="font-size:13px; color:var(--text-muted); line-height:1.6;">${issue.description}</div>
+          </div>
+        ` : ''}
+
+        <!-- Update status -->
+        <div style="background:var(--bg); border-radius:8px; padding:14px; margin-bottom:14px;">
+          <div style="font-weight:600; font-size:13px; margin-bottom:8px;">Update Status</div>
+          <div style="display:flex; gap:8px; align-items:flex-start; flex-direction:column;">
+            <select id="statusSelect_${id}" class="status-select" style="width:100%;">
+              ${statusOptions}
+            </select>
+            <textarea id="noteInput_${id}" placeholder="Add a note (optional)..."
+              style="height:60px; resize:none; width:100%;"></textarea>
+            <button class="btn btn-primary btn-sm" onclick="updateStatus('${id}')">
+              Update Status
+            </button>
+          </div>
+        </div>
+
+        <!-- Timeline -->
+        ${logs.length ? `
+          <div style="margin-bottom:14px;">
+            <div style="font-weight:600; font-size:13px; margin-bottom:8px;">Timeline</div>
+            ${logs.map(l => `
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div>
+                  <div style="font-weight:600;">
+                    ${l.from_status ? l.from_status+' → ' : ''}${l.to_status}
+                    <span class="text-muted text-small" style="font-weight:400; margin-left:6px;">
+                      by ${l.changed_by_name||'System'}
+                    </span>
+                  </div>
+                  ${l.note ? `<div class="text-muted">${l.note}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+
+        <!-- Comments -->
+        <div>
+          <div style="font-weight:600; font-size:13px; margin-bottom:8px;">
+            Comments (${comments.length})
+          </div>
+          ${comments.map(c => `
+            <div class="comment-item">
+              <div class="author">
+                ${c.author_name||'User'}
+                ${c.is_official ? `<span class="badge badge-pending" style="font-size:10px;">Official</span>` : ''}
+              </div>
+              ${c.text}
+            </div>
+          `).join('')}
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <input type="text" id="commentInput_${id}" placeholder="Add official comment..."
+              onkeydown="if(event.key==='Enter') submitComment('${id}')"/>
+            <button class="btn btn-primary btn-sm" onclick="submitComment('${id}')">Post</button>
+          </div>
+        </div>
+      `;
+    } catch(e) {
+      content.innerHTML = `<p style="color:var(--critical);">Failed to load: ${e.message}</p>
+        <button class="btn btn-outline" onclick="closeModal()">Close</button>`;
+    }
+  }
+
+  function closeModal() {
+    document.getElementById('detailModal').classList.remove('open');
+  }
+
+  document.getElementById('detailModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // ── Quick status update ────────────────────────────────────────────────
+  async function quickStatus(id) {
+    const issue = allIssues.find(i => i.id === id);
+    if (!issue) return;
+
+    const next = {
+      pending: 'verified',
+      verified: 'assigned',
+      assigned: 'in_progress',
+      in_progress: 'resolved',
+    }[issue.status];
+
+    if (!next) return showToast('Issue is already ' + issue.status, 'warn');
+
+    try {
+      await post(`/issues/${id}/update-status`, { status: next, note: '' }, true);
+      showToast(`Status → ${next.replace('_',' ')}`);
+      await loadIssues();
+    } catch(e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  // ── Update status from modal ───────────────────────────────────────────
+  async function updateStatus(id) {
+    const status = document.getElementById(`statusSelect_${id}`).value;
+    const note   = document.getElementById(`noteInput_${id}`).value.trim();
+    try {
+      await post(`/issues/${id}/update-status`, { status, note }, true);
+      showToast('Status updated!');
+      closeModal();
+      await loadIssues();
+    } catch(e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  // ── Submit comment ────────────────────────────────────────────────────
+  async function submitComment(id) {
+    const text = document.getElementById(`commentInput_${id}`).value.trim();
+    if (!text) return;
+    try {
+      await post(`/issues/${id}/comment`, { text }, true);
+      showToast('Comment posted!');
+      openDetail(id); // refresh modal
+    } catch(e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  // ── Logout ─────────────────────────────────────────────────────────────
+  function logout() {
+    Auth.clear();
+    window.location.href = '/portal/pages/login.html';
+  }
+</script>
+</body>
+</html>

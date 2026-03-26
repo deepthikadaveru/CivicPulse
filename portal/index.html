@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CivicPulse — Public Map</title>
+
+  <link rel="stylesheet" href="/portal/css/style.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .map-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .map-wrapper {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .sidebar {
+      width: 340px;
+      background: var(--surface);
+      border-left: 0.5px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 2;
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 0.5px solid var(--border);
+    }
+
+    .sidebar-header h2 {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .sidebar-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .issue-item {
+      padding: 12px;
+      border-radius: 8px;
+      border: 0.5px solid var(--border);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      background: var(--surface);
+    }
+
+    .issue-item:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .issue-item.selected {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .issue-item .title {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .issue-item .meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    .detail-panel {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 340px;
+      background: var(--surface);
+      border-top: 0.5px solid var(--border);
+      padding: 16px 20px;
+      z-index: 10;
+      transform: translateY(100%);
+      transition: transform 0.25s ease;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+
+    .detail-panel.open {
+      transform: translateY(0);
+    }
+
+    .detail-panel .close-btn {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    .map-controls {
+      position: absolute;
+      top: 70px;
+      left: 10px;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .map-controls .filter-chip {
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text);
+      transition: all 0.15s ease;
+    }
+
+    .map-controls .filter-chip.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .legend {
+      position: absolute;
+      bottom: 30px;
+      left: 10px;
+      z-index: 50;
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+      font-size: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 5px;
+    }
+
+    .legend-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .summary-bar {
+      display: flex;
+      gap: 16px;
+      padding: 4px 0 10px;
+      flex-wrap: wrap;
+    }
+
+    .summary-bar .s-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .summary-bar .s-item strong {
+      color: var(--text);
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(0.9);
+        opacity: 0.28;
+      }
+      70% {
+        transform: scale(1.5);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1.5);
+        opacity: 0;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        display: none;
+      }
+
+      .detail-panel {
+        right: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a class="brand" href="/portal/">
+      <div class="icon">🏙️</div>
+      CivicPulse
+    </a>
+    <div class="nav-links">
+      <a href="/portal/" class="active">Public Map</a>
+      <a href="/portal/pages/login.html">Officials Login</a>
+    </div>
+  </nav>
+
+  <!-- Main layout -->
+  <div class="map-layout">
+
+    <!-- Map -->
+    <div class="map-wrapper">
+      <div id="map"></div>
+
+      <!-- Filter chips -->
+      <div class="map-controls">
+        <button class="filter-chip active" onclick="setFilter('all', this)">All Issues</button>
+        <button class="filter-chip" onclick="setFilter('active', this)">Active</button>
+        <button class="filter-chip" onclick="setFilter('resolved', this)">Resolved</button>
+      </div>
+
+      <!-- Legend -->
+      <div class="legend">
+        <div class="legend-item"><span class="dot dot-critical"></span> Critical</div>
+        <div class="legend-item"><span class="dot dot-high"></span> High</div>
+        <div class="legend-item"><span class="dot dot-moderate"></span> Moderate</div>
+        <div class="legend-item"><span class="dot dot-low"></span> Low</div>
+        <div class="legend-item"><span class="dot dot-resolved"></span> Resolved</div>
+      </div>
+
+      <!-- Detail panel -->
+      <div class="detail-panel" id="detailPanel">
+        <button class="close-btn" onclick="closeDetail()">✕</button>
+        <div id="detailContent"></div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>Issue Reports</h2>
+        <div class="summary-bar" id="summaryBar">
+          <div class="s-item"><span class="spinner"></span> Loading...</div>
+        </div>
+        <input
+          type="text"
+          id="searchInput"
+          placeholder="Search issues..."
+          style="margin-top:6px;"
+          oninput="filterList()"
+        />
+      </div>
+      <div class="sidebar-body" id="issueList">
+        <div style="text-align:center; padding:40px 0; color:var(--text-muted);">
+          <div class="spinner" style="margin:0 auto 10px;"></div>
+          Loading issues...
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/portal/js/api.js"></script>
+
+  <script>
+    // ── State ──────────────────────────────────────────────────────────────
+    let map, markersLayer, glowLayer;
+    let allIssues = [];
+    let currentFilter = 'all';
+    let selectedId = null;
+    let cityId = null;
+
+    // ── Init map ───────────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', async () => {
+      map = L.map('map').setView([17.3850, 78.4867], 13);
+
+      // Force resize after layout settles
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 300);
+
+      // Safe working tile source
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      glowLayer = L.layerGroup().addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+
+      map.on('moveend', loadPins);
+
+      try {
+        cityId = await ensureCity();
+      } catch (e) {
+        console.error('ensureCity failed:', e);
+      }
+
+      await loadPins();
+      await loadSidebar();
+    });
+
+    // ── Load map pins ──────────────────────────────────────────────────────
+    async function loadPins() {
+      if (!cityId || !map) return;
+      const b = map.getBounds();
+
+      try {
+        const pins = await get(
+          `/issues/map-pins?city_id=${cityId}` +
+          `&min_lng=${b.getWest()}&min_lat=${b.getSouth()}` +
+          `&max_lng=${b.getEast()}&max_lat=${b.getNorth()}` +
+          `&status=${currentFilter}`
+        );
+
+        renderPins(pins || []);
+      } catch (e) {
+        console.error('Pin load error:', e);
+      }
+    }
+
+    // ── Render pins + glow zones ───────────────────────────────────────────
+    function renderPins(pins) {
+      if (!markersLayer || !glowLayer) return;
+
+      markersLayer.clearLayers();
+      glowLayer.clearLayers();
+
+      pins.forEach(pin => {
+        if (!pin.latitude || !pin.longitude) return;
+
+        const isCritical = pin.severity === 'critical' && pin.status !== 'resolved';
+        const color = pin.status === 'resolved'
+          ? '#1D9E75'
+          : severityColor(pin.severity);
+
+        // Stronger glow zones for visibility on light map
+        const glowRadius =
+          pin.status === 'resolved' ? 45 :
+          pin.severity === 'critical' ? 140 :
+          pin.severity === 'high' ? 110 :
+          pin.severity === 'moderate' ? 85 : 65;
+
+        const glowOpacity =
+          pin.status === 'resolved' ? 0.14 :
+          pin.severity === 'critical' ? 0.28 :
+          pin.severity === 'high' ? 0.22 :
+          pin.severity === 'moderate' ? 0.18 : 0.14;
+
+        const glow = L.circle([pin.latitude, pin.longitude], {
+          radius: glowRadius,
+          color: color,
+          fillColor: color,
+          fillOpacity: glowOpacity,
+          weight: 0,
+          interactive: false,
+        });
+
+        glowLayer.addLayer(glow);
+
+        const icon = L.divIcon({
+          className: '',
+          html: `
+            <div style="position:relative; width:30px; height:30px;">
+              ${isCritical ? `<div style="
+                position:absolute; inset:-7px;
+                border-radius:50%;
+                background:${color};
+                opacity:0.28;
+                animation:pulse 1.6s ease-out infinite;
+              "></div>` : ''}
+              <div style="
+                width:30px; height:30px;
+                background:${color};
+                border:2.5px solid #fff;
+                border-radius:50%;
+                display:flex; align-items:center; justify-content:center;
+                font-size:12px; font-weight:800; color:#fff;
+                box-shadow:0 2px 8px rgba(0,0,0,0.25);
+              ">${pin.status === 'resolved' ? '✓' : '!'}</div>
+            </div>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15],
+        });
+
+        const marker = L.marker([pin.latitude, pin.longitude], { icon });
+        marker.on('click', () => showDetail(pin));
+        markersLayer.addLayer(marker);
+      });
+    }
+
+    // ── Sidebar issue list ─────────────────────────────────────────────────
+    async function loadSidebar() {
+      if (!cityId) return;
+
+      try {
+        const res = await get(`/issues/?city_id=${cityId}&limit=50`);
+        allIssues = res.issues || [];
+        renderSidebar(allIssues);
+        renderSummary(allIssues);
+      } catch (e) {
+        console.error('Sidebar load error:', e);
+        document.getElementById('issueList').innerHTML =
+          `<p style="color:var(--text-muted); text-align:center; padding:20px;">Failed to load issues</p>`;
+      }
+    }
+
+    function renderSidebar(issues) {
+      const el = document.getElementById('issueList');
+
+      if (!issues.length) {
+        el.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:30px 0;">No issues found</p>`;
+        return;
+      }
+
+      el.innerHTML = issues.map(i => `
+        <div class="issue-item ${selectedId === i.id ? 'selected' : ''}" onclick="clickSidebarItem('${i.id}', ${i.latitude}, ${i.longitude})">
+          <div class="flex-center gap-8">
+            <span class="dot dot-${i.severity}"></span>
+            <span class="title">${i.title}</span>
+          </div>
+          ${i.address ? `<div class="text-muted text-small mt-4" style="padding-left:18px;">📍 ${i.address}</div>` : ''}
+          <div class="meta">
+            ${badgeHtml(i.status, i.status)}
+            ${i.category_name ? `<span class="text-small text-muted">${i.category_name}</span>` : ''}
+            <span class="text-small text-muted" style="margin-left:auto;">
+              👍 ${i.upvote_count || 0} · 👥 ${i.report_count || 1} · ${timeAgo(i.created_at)}
+            </span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderSummary(issues) {
+      const total = issues.length;
+      const active = issues.filter(i => i.status !== 'resolved' && i.status !== 'rejected').length;
+      const resolved = issues.filter(i => i.status === 'resolved').length;
+      const critical = issues.filter(i => i.severity === 'critical' && i.status !== 'resolved').length;
+
+      document.getElementById('summaryBar').innerHTML = `
+        <div class="s-item"><strong>${total}</strong> total</div>
+        <div class="s-item" style="color:var(--critical);"><strong>${critical}</strong> critical</div>
+        <div class="s-item" style="color:#185FA5;"><strong>${active}</strong> active</div>
+        <div class="s-item" style="color:var(--resolved);"><strong>${resolved}</strong> resolved</div>
+      `;
+    }
+
+    function filterList() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+
+      const filtered = allIssues.filter(i =>
+        i.title.toLowerCase().includes(q) ||
+        (i.address || '').toLowerCase().includes(q) ||
+        (i.category_name || '').toLowerCase().includes(q)
+      );
+
+      renderSidebar(filtered);
+    }
+
+    function clickSidebarItem(id, lat, lng) {
+      selectedId = id;
+      map.setView([lat, lng], 16);
+
+      const issue = allIssues.find(i => i.id === id);
+      if (issue) showDetail(issue);
+
+      renderSidebar(allIssues);
+    }
+
+    // ── Detail panel ───────────────────────────────────────────────────────
+    function showDetail(pin) {
+      document.getElementById('detailContent').innerHTML = `
+        <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:12px;">
+          <span class="dot dot-${pin.severity}" style="margin-top:4px; width:12px; height:12px;"></span>
+          <div style="flex:1;">
+            <div style="font-size:16px; font-weight:700;">${pin.title}</div>
+            ${pin.address ? `<div class="text-muted text-small mt-4">📍 ${pin.address}</div>` : ''}
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          ${badgeHtml(pin.status, pin.status)}
+          ${pin.severity ? badgeHtml(pin.severity, pin.severity) : ''}
+          ${pin.category_name ? `<span class="badge badge-pending">${pin.category_name}</span>` : ''}
+          ${pin.department_name ? `<span class="badge badge-pending">🏢 ${pin.department_name}</span>` : ''}
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px;">
+          <div class="stat-card" style="padding:10px;">
+            <div class="value" style="font-size:20px;">${pin.report_count || 1}</div>
+            <div class="label">Reports</div>
+          </div>
+          <div class="stat-card" style="padding:10px;">
+            <div class="value" style="font-size:20px;">${pin.upvote_count || 0}</div>
+            <div class="label">Upvotes</div>
+          </div>
+          <div class="stat-card" style="padding:10px;">
+            <div class="value" style="font-size:20px;">${pin.days_open || 0}d</div>
+            <div class="label">Open</div>
+          </div>
+        </div>
+
+        ${pin.thumbnail_url ? `
+          <img src="http://127.0.0.1:8000${pin.thumbnail_url}"
+            style="width:100%; max-height:160px; object-fit:cover; border-radius:8px; margin-bottom:12px;"
+            onerror="this.style.display='none'"/>
+        ` : ''}
+
+        <div style="font-size:12px; color:var(--text-muted);">Reported ${timeAgo(pin.created_at)}</div>
+      `;
+
+      document.getElementById('detailPanel').classList.add('open');
+    }
+
+    function closeDetail() {
+      document.getElementById('detailPanel').classList.remove('open');
+      selectedId = null;
+      renderSidebar(allIssues);
+    }
+
+    // ── Filter ─────────────────────────────────────────────────────────────
+    function setFilter(f, btn) {
+      currentFilter = f;
+
+      document.querySelectorAll('.map-controls .filter-chip')
+        .forEach(b => b.classList.remove('active'));
+
+      btn.classList.add('active');
+      loadPins();
+    }
+  </script>
+</body>
+</html>

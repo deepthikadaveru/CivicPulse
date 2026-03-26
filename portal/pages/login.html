@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CivicPulse — Officials Login</title>
+  <link rel="stylesheet" href="/portal/css/style.css"/>
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .login-box {
+      background: var(--surface);
+      border-radius: 16px;
+      border: 0.5px solid var(--border);
+      padding: 36px 32px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    .login-box .brand {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 20px; font-weight: 700; color: var(--primary);
+      margin-bottom: 8px;
+    }
+    .login-box .brand .icon {
+      width: 40px; height: 40px;
+      background: var(--primary-light);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    .login-box p { color: var(--text-muted); margin-bottom: 28px; font-size: 13px; }
+    .otp-display {
+      background: #E8F5E9;
+      border: 0.5px solid #A5D6A7;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      color: #2E7D32;
+    }
+    .otp-input {
+      font-size: 24px;
+      letter-spacing: 10px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .step { display: none; }
+    .step.active { display: block; }
+    .back-link {
+      display: block; text-align: center; margin-top: 14px;
+      color: var(--text-muted); font-size: 13px; cursor: pointer;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <div class="brand">
+      <div class="icon">🏙️</div>
+      CivicPulse
+    </div>
+    <p>Department Officials Portal</p>
+
+    <!-- Step 1: Phone -->
+    <div class="step active" id="step1">
+      <div class="form-group">
+        <label>Phone number</label>
+        <input type="tel" id="phoneInput" placeholder="+91 9876543210"
+          onkeydown="if(event.key==='Enter') sendOtp()"/>
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="sendOtp()" id="sendBtn">
+        Send OTP
+      </button>
+      <a href="/portal/" style="display:block; text-align:center; margin-top:14px;
+        color:var(--text-muted); font-size:13px; text-decoration:none;">
+        ← Back to public map
+      </a>
+    </div>
+
+    <!-- Step 2: OTP -->
+    <div class="step" id="step2">
+      <div class="otp-display" id="otpHint" style="display:none;"></div>
+      <div class="form-group">
+        <label>Enter OTP</label>
+        <input type="number" id="otpInput" class="otp-input" placeholder="——————"
+          maxlength="6" onkeydown="if(event.key==='Enter') verifyOtp()"/>
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="verifyOtp()" id="verifyBtn">
+        Verify & Login
+      </button>
+      <span class="back-link" onclick="goBack()">Change phone number</span>
+    </div>
+  </div>
+
+  <script src="/portal/js/api.js"></script>
+  <script>
+    // Redirect if already logged in as official
+    if (Auth.isLoggedIn() && Auth.isOfficial()) {
+      window.location.href = '/portal/pages/dashboard.html';
+    }
+
+    let phoneNumber = '';
+
+    async function sendOtp() {
+      const phone = document.getElementById('phoneInput').value.trim();
+      if (!phone) return showToast('Enter your phone number', 'error');
+
+      phoneNumber = phone.startsWith('+') ? phone : `+91${phone}`;
+      const btn = document.getElementById('sendBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Sending...';
+
+      try {
+        const res = await post('/auth/send-otp', { phone_number: phoneNumber });
+        // Show OTP hint in dev mode
+        if (res.otp) {
+          const hint = document.getElementById('otpHint');
+          hint.style.display = 'block';
+          hint.textContent = `Dev mode — your OTP is: ${res.otp}`;
+          document.getElementById('otpInput').value = res.otp;
+        }
+        document.getElementById('step1').classList.remove('active');
+        document.getElementById('step2').classList.add('active');
+        showToast('OTP sent!');
+      } catch(e) {
+        showToast(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send OTP';
+      }
+    }
+
+    async function verifyOtp() {
+      const otp = document.getElementById('otpInput').value.trim();
+      if (otp.length !== 6) return showToast('Enter 6-digit OTP', 'error');
+
+      const btn = document.getElementById('verifyBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Verifying...';
+
+      try {
+        const res = await post('/auth/verify-otp', {
+          phone_number: phoneNumber,
+          otp: otp,
+          name: '',
+        });
+
+        Auth.setAuth(res.access_token, res.user);
+
+        if (!Auth.isOfficial()) {
+          Auth.clear();
+          showToast('Access denied. This portal is for officials only.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Verify & Login';
+          return;
+        }
+
+        showToast('Login successful!');
+        setTimeout(() => window.location.href = '/portal/pages/dashboard.html', 800);
+      } catch(e) {
+        showToast(e.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Verify & Login';
+      }
+    }
+
+    function goBack() {
+      document.getElementById('step2').classList.remove('active');
+      document.getElementById('step1').classList.add('active');
+      document.getElementById('otpHint').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
