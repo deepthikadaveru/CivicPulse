@@ -35,11 +35,13 @@ class ApiClient {
   // ── Auth ──────────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> sendOtp(String phoneNumber) async {
-    final res = await _dio.post('/auth/send-otp', data: {'phone_number': phoneNumber});
+    final res =
+        await _dio.post('/auth/send-otp', data: {'phone_number': phoneNumber});
     return res.data;
   }
 
-  Future<Map<String, dynamic>> verifyOtp(String phoneNumber, String otp, String name) async {
+  Future<Map<String, dynamic>> verifyOtp(
+      String phoneNumber, String otp, String name) async {
     final res = await _dio.post('/auth/verify-otp', data: {
       'phone_number': phoneNumber,
       'otp': otp,
@@ -63,7 +65,8 @@ class ApiClient {
   // ── Departments / Categories ──────────────────────────────────────────────
 
   Future<List<dynamic>> getCategories(String cityId) async {
-    final res = await _dio.get('/departments/categories', queryParameters: {'city_id': cityId});
+    final res = await _dio
+        .get('/departments/categories', queryParameters: {'city_id': cityId});
     return res.data;
   }
 
@@ -137,13 +140,16 @@ class ApiClient {
     return res.data;
   }
 
-  Future<Map<String, dynamic>> confirmCategory(String issueId, String categoryId) async {
-    final res = await _dio.post('/issues/$issueId/confirm-category', data: {'category_id': categoryId});
+  Future<Map<String, dynamic>> confirmCategory(
+      String issueId, String categoryId) async {
+    final res = await _dio.post('/issues/$issueId/confirm-category',
+        data: {'category_id': categoryId});
     return res.data;
   }
 
   Future<Map<String, dynamic>> addComment(String issueId, String text) async {
-    final res = await _dio.post('/issues/$issueId/comment', data: {'text': text});
+    final res =
+        await _dio.post('/issues/$issueId/comment', data: {'text': text});
     return res.data;
   }
 

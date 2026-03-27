@@ -32,6 +32,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> sendOtp(String phoneNumber) async {
+    debugPrint('Sending OTP to: ${AppConstants.baseUrl}/auth/send-otp');
     _isLoading = true;
     _error = null;
     notifyListeners();

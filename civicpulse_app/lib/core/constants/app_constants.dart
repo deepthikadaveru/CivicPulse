@@ -4,8 +4,8 @@ class AppConstants {
   // ── Change this to your machine's local IP when testing on a real device ──
   // For emulator use: http://10.0.2.2:8000
   // For real device use: http://YOUR_PC_IP:8000 (e.g. http://192.168.1.5:8000)
-  static const String baseUrl = 'http://127.0.0.1:8000/api/v1';
-
+  static const String baseUrl = 'http://192.168.0.109:8000/api/v1';
+  //static const String baseUrl = 'http://127.0.0.1:8000/api/v1';
   static const String appName = 'CivicPulse';
   static const String tokenKey = 'access_token';
   static const String userKey = 'user_data';
